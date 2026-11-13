@@ -65,9 +65,13 @@ jobs:
         run: |
           choco install winflexbison3 gperf -y --no-progress
           New-Item -ItemType Directory -Force C:\tools | Out-Null
-          Copy-Item 'C:\ProgramData\chocolatey\bin\win_flex.exe'  C:\tools\flex.exe  -Force
-          Copy-Item 'C:\ProgramData\chocolatey\bin\win_bison.exe' C:\tools\bison.exe -Force
-          Copy-Item 'C:\ProgramData\chocolatey\bin\gperf.exe'     C:\tools\gperf.exe -Force
+          $flex  = Get-ChildItem 'C:\ProgramData\chocolatey\lib' -Recurse -Filter win_flex.exe  -ErrorAction SilentlyContinue | Select-Object -First 1
+          $bison = Get-ChildItem 'C:\ProgramData\chocolatey\lib' -Recurse -Filter win_bison.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          $gperf = Get-ChildItem 'C:\ProgramData\chocolatey\lib' -Recurse -Filter gperf.exe     -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $flex -or -not $bison -or -not $gperf) { throw 'flex/bison/gperf exe not found' }
+          Copy-Item $flex.FullName  C:\tools\flex.exe  -Force
+          Copy-Item $bison.FullName C:\tools\bison.exe -Force
+          Copy-Item $gperf.FullName C:\tools\gperf.exe -Force
           C:\tools\flex.exe --version
           C:\tools\bison.exe --version
           C:\tools\gperf.exe --version
