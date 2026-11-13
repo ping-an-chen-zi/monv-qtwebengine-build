@@ -33,29 +33,32 @@ jobs:
         with:
           arch: x64
 
-      - name: Install Qt SDK from Aliyun mirror
+      - name: Install Qt SDK from official Qt mirror
         shell: pwsh
         run: |
+          $ProgressPreference = 'SilentlyContinue'
           $QtRoot = 'C:\Qt\6.11.2\msvc2022_64'
           New-Item -ItemType Directory -Force $QtRoot | Out-Null
-          $B = 'https://mirrors.aliyun.com/qt/online/qtsdkrepository/windows_x86/desktop/qt6_6112/qt6_6112_msvc2022_64'
-          $P = '6.11.2-0-202608131017'
-          $basePkg = 'qt.qt6.6112.win64_msvc2022_64'
-          $files = @(
-            @{ pkg = $basePkg; name = "${P}qtbase-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z" },
-            @{ pkg = $basePkg; name = "${P}qtsvg-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z" },
-            @{ pkg = $basePkg; name = "${P}qtdeclarative-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z" },
-            @{ pkg = $basePkg; name = "${P}qttools-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z" },
-            @{ pkg = 'qt.qt6.6112.addons.qtshadertools.win64_msvc2022_64'; name = "${P}qtshadertools-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z" },
-            @{ pkg = 'qt.qt6.6112.addons.qtwebchannel.win64_msvc2022_64'; name = "${P}qtwebchannel-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z" }
+          New-Item -ItemType Directory -Force 'C:\QtArchives' | Out-Null
+          $B = 'https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_6112/qt6_6112_msvc2022_64'
+          $specs = @(
+            @{ pkg = 'qt.qt6.6112.win64_msvc2022_64'; pat = '*qtbase-*.7z' },
+            @{ pkg = 'qt.qt6.6112.win64_msvc2022_64'; pat = '*qtsvg-*.7z' },
+            @{ pkg = 'qt.qt6.6112.win64_msvc2022_64'; pat = '*qtdeclarative-*.7z' },
+            @{ pkg = 'qt.qt6.6112.win64_msvc2022_64'; pat = '*qttools-*.7z' },
+            @{ pkg = 'qt.qt6.6112.addons.qtshadertools.win64_msvc2022_64'; pat = '*qtshadertools-*.7z' },
+            @{ pkg = 'qt.qt6.6112.addons.qtwebchannel.win64_msvc2022_64'; pat = '*qtwebchannel-*.7z' }
           )
-          foreach ($f in $files) {
-            $out = Join-Path 'C:\QtArchives' $f.name
-            New-Item -ItemType Directory -Force 'C:\QtArchives' | Out-Null
-            Invoke-WebRequest -Uri "$B/$($f.pkg)/$($f.name)" -OutFile $out
+          foreach ($s in $specs) {
+            $html = (Invoke-WebRequest "$B/$($s.pkg)/").Content
+            $name = ([regex]::Matches($html, 'href="([^"]+\.7z)"') | ForEach-Object { $_.Groups[1].Value } | Where-Object { $_ -like $s.pat } | Select-Object -First 1)
+            if (-not $name) { throw "archive not found: $($s.pat)" }
+            $name = Split-Path $name -Leaf
+            $out = Join-Path 'C:\QtArchives' $name
+            Invoke-WebRequest "$B/$($s.pkg)/$name" -OutFile $out
             7z x $out "-o$QtRoot" -y | Out-Null
           }
-          if (-not (Test-Path "$QtRoot\bin\qt-cmake.bat")) { throw "qt-cmake.bat missing" }
+          if (-not (Test-Path "$QtRoot\bin\qt-cmake.bat")) { throw 'qt-cmake.bat missing' }
 
       - name: Install flex bison gperf
         shell: pwsh
