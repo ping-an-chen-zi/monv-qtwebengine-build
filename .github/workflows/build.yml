@@ -1,0 +1,91 @@
+name: build-qtwebengine
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 360
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          Remove-Item 'C:\hostedtoolcache\windows\Java*' -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item 'C:\hostedtoolcache\windows\Ruby' -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item 'C:\Program Files\Android' -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item 'C:\Program Files\Google\Chrome' -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item 'C:\Program Files (x86)\Microsoft\Edge' -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item 'C:\Program Files\Microsoft\Edge' -Recurse -Force -ErrorAction SilentlyContinue
+          Get-PSDrive C | Select-Object Used,Free
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Qt and build tools
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip aqtinstall
+          python -m aqt install-qt windows desktop 6.11.2 win64_msvc2022_64 -O C:\Qt -m qtshadertools qtwebchannel
+
+          New-Item -ItemType Directory -Force C:\tools | Out-Null
+          winget install --id WinFlexBison.win_flex_bison --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          winget install --id oss-winget.gperf --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+
+          $roots = @("$env:LOCALAPPDATA\Microsoft\WinGet\Packages", 'C:\Program Files\WinGet\Packages', 'C:\Program Files')
+          $flex = $null; $bison = $null; $gperf = $null
+          foreach ($r in $roots) {
+            if (-not $flex)  { $flex  = Get-ChildItem $r -Recurse -Filter win_flex.exe  -ErrorAction SilentlyContinue | Select-Object -First 1 }
+            if (-not $bison) { $bison = Get-ChildItem $r -Recurse -Filter win_bison.exe -ErrorAction SilentlyContinue | Select-Object -First 1 }
+            if (-not $gperf) { $gperf = Get-ChildItem $r -Recurse -Filter gperf.exe     -ErrorAction SilentlyContinue | Select-Object -First 1 }
+          }
+          if (-not $flex -or -not $bison -or -not $gperf) { throw "flex/bison/gperf not found" }
+          Copy-Item $flex.FullName  C:\tools\flex.exe  -Force
+          Copy-Item $bison.FullName C:\tools\bison.exe -Force
+          Copy-Item $gperf.FullName C:\tools\gperf.exe -Force
+          C:\tools\flex.exe --version
+          C:\tools\bison.exe --version
+          C:\tools\gperf.exe --version
+
+      - name: Download source and apply patch
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri 'https://download.qt.io/official_releases/qt/6.11/6.11.2/submodules/qtwebengine-everywhere-src-6.11.2.tar.xz' -OutFile C:\qtwebengine.tar.xz
+          7z x C:\qtwebengine.tar.xz -oC:\ -y | Out-Null
+          tar -xf C:\qtwebengine.tar -C C:\
+          python patch/apply_patch.py C:\qtwebengine-everywhere-src-6.11.2
+
+      - name: Configure
+        shell: cmd
+        run: |
+          set "PATH=C:\tools;C:\Qt\6.11.2\msvc2022_64\bin;%PATH%"
+          if not exist C:\qtwebengine-build mkdir C:\qtwebengine-build
+          cd /d C:\qtwebengine-build
+          call "C:\Qt\6.11.2\msvc2022_64\bin\qt-cmake.bat" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=C:\qtwebengine-install -DQT_BUILD_EXAMPLES=OFF -DQT_BUILD_TESTS=OFF "C:\qtwebengine-everywhere-src-6.11.2"
+
+      - name: Build and install
+        shell: cmd
+        run: |
+          set "PATH=C:\tools;C:\Qt\6.11.2\msvc2022_64\bin;%PATH%"
+          cmake --build C:\qtwebengine-build --parallel 4
+          cmake --install C:\qtwebengine-build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qtwebengine-install
+          path: C:\qtwebengine-install
+          retention-days: 7
+          compression-level: 0
