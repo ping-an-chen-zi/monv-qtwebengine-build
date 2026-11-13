@@ -2,8 +2,6 @@ name: build-qtwebengine
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 jobs:
   build:
@@ -35,27 +33,38 @@ jobs:
         with:
           arch: x64
 
-      - name: Install Qt and build tools
+      - name: Install Qt SDK from Aliyun mirror
         shell: pwsh
         run: |
-          python -m pip install --upgrade pip aqtinstall
-          python -m aqt install-qt windows desktop 6.11.2 win64_msvc2022_64 -O C:\Qt -m qtshadertools qtwebchannel
-
-          New-Item -ItemType Directory -Force C:\tools | Out-Null
-          winget install --id WinFlexBison.win_flex_bison --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
-          winget install --id oss-winget.gperf --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
-
-          $roots = @("$env:LOCALAPPDATA\Microsoft\WinGet\Packages", 'C:\Program Files\WinGet\Packages', 'C:\Program Files')
-          $flex = $null; $bison = $null; $gperf = $null
-          foreach ($r in $roots) {
-            if (-not $flex)  { $flex  = Get-ChildItem $r -Recurse -Filter win_flex.exe  -ErrorAction SilentlyContinue | Select-Object -First 1 }
-            if (-not $bison) { $bison = Get-ChildItem $r -Recurse -Filter win_bison.exe -ErrorAction SilentlyContinue | Select-Object -First 1 }
-            if (-not $gperf) { $gperf = Get-ChildItem $r -Recurse -Filter gperf.exe     -ErrorAction SilentlyContinue | Select-Object -First 1 }
+          $QtRoot = 'C:\Qt\6.11.2\msvc2022_64'
+          New-Item -ItemType Directory -Force $QtRoot | Out-Null
+          $B = 'https://mirrors.aliyun.com/qt/online/qtsdkrepository/windows_x86/desktop/qt6_6112/qt6_6112_msvc2022_64'
+          $P = '6.11.2-0-202608131017'
+          $basePkg = 'qt.qt6.6112.win64_msvc2022_64'
+          $files = @(
+            @{ pkg = $basePkg; name = "${P}qtbase-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z" },
+            @{ pkg = $basePkg; name = "${P}qtsvg-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z" },
+            @{ pkg = $basePkg; name = "${P}qtdeclarative-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z" },
+            @{ pkg = $basePkg; name = "${P}qttools-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z" },
+            @{ pkg = 'qt.qt6.6112.addons.qtshadertools.win64_msvc2022_64'; name = "${P}qtshadertools-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z" },
+            @{ pkg = 'qt.qt6.6112.addons.qtwebchannel.win64_msvc2022_64'; name = "${P}qtwebchannel-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z" }
+          )
+          foreach ($f in $files) {
+            $out = Join-Path 'C:\QtArchives' $f.name
+            New-Item -ItemType Directory -Force 'C:\QtArchives' | Out-Null
+            Invoke-WebRequest -Uri "$B/$($f.pkg)/$($f.name)" -OutFile $out
+            7z x $out "-o$QtRoot" -y | Out-Null
           }
-          if (-not $flex -or -not $bison -or -not $gperf) { throw "flex/bison/gperf not found" }
-          Copy-Item $flex.FullName  C:\tools\flex.exe  -Force
-          Copy-Item $bison.FullName C:\tools\bison.exe -Force
-          Copy-Item $gperf.FullName C:\tools\gperf.exe -Force
+          if (-not (Test-Path "$QtRoot\bin\qt-cmake.bat")) { throw "qt-cmake.bat missing" }
+
+      - name: Install flex bison gperf
+        shell: pwsh
+        run: |
+          choco install winflexbison3 gperf -y --no-progress
+          New-Item -ItemType Directory -Force C:\tools | Out-Null
+          Copy-Item 'C:\ProgramData\chocolatey\bin\win_flex.exe'  C:\tools\flex.exe  -Force
+          Copy-Item 'C:\ProgramData\chocolatey\bin\win_bison.exe' C:\tools\bison.exe -Force
+          Copy-Item 'C:\ProgramData\chocolatey\bin\gperf.exe'     C:\tools\gperf.exe -Force
           C:\tools\flex.exe --version
           C:\tools\bison.exe --version
           C:\tools\gperf.exe --version
