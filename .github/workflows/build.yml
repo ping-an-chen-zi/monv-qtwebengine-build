@@ -93,16 +93,18 @@ jobs:
           cd /d C:\qtwebengine-build
           call "C:\Qt\6.11.2\msvc2022_64\bin\qt-cmake.bat" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=C:\qtwebengine-install -DQT_BUILD_EXAMPLES=OFF -DQT_BUILD_TESTS=OFF -DFEATURE_qtpdf_build=OFF -DFEATURE_qtwebengine_webenginequick=OFF -DFEATURE_qtwebengine_webenginewidgets=OFF "C:\qtwebengine-everywhere-src-6.11.2"
 
-      - name: Build and install
+      - name: Build core and collect DLL
         shell: cmd
         run: |
           set "PATH=C:\tools;C:\Qt\6.11.2\msvc2022_64\bin;%PATH%"
-          cmake --build C:\qtwebengine-build --target QtWebEngineCore --parallel 4
-          cmake --install C:\qtwebengine-build
+          cmake --build C:\qtwebengine-build --target WebEngineCore --parallel 4
+          if not exist C:\qtwebengine-out mkdir C:\qtwebengine-out
+          copy /Y C:\qtwebengine-build\bin\Qt6WebEngineCore.dll C:\qtwebengine-out\
+          if not exist C:\qtwebengine-out\Qt6WebEngineCore.dll exit /b 3
 
       - uses: actions/upload-artifact@v4
         with:
-          name: qtwebengine-install
-          path: C:\qtwebengine-install
+          name: qtwebengine-core
+          path: C:\qtwebengine-out
           retention-days: 7
           compression-level: 0
