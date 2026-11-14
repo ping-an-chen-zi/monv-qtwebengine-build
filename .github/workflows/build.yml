@@ -91,13 +91,13 @@ jobs:
           set "PATH=C:\tools;C:\Qt\6.11.2\msvc2022_64\bin;%PATH%"
           if not exist C:\qtwebengine-build mkdir C:\qtwebengine-build
           cd /d C:\qtwebengine-build
-          call "C:\Qt\6.11.2\msvc2022_64\bin\qt-cmake.bat" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=C:\qtwebengine-install -DQT_BUILD_EXAMPLES=OFF -DQT_BUILD_TESTS=OFF "C:\qtwebengine-everywhere-src-6.11.2"
+          call "C:\Qt\6.11.2\msvc2022_64\bin\qt-cmake.bat" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=C:\qtwebengine-install -DQT_BUILD_EXAMPLES=OFF -DQT_BUILD_TESTS=OFF -DFEATURE_qtpdf_build=OFF -DFEATURE_qtwebengine_webenginequick=OFF -DFEATURE_qtwebengine_webenginewidgets=OFF "C:\qtwebengine-everywhere-src-6.11.2"
 
       - name: Build and install
         shell: cmd
         run: |
           set "PATH=C:\tools;C:\Qt\6.11.2\msvc2022_64\bin;%PATH%"
-          cmake --build C:\qtwebengine-build --parallel 4
+          cmake --build C:\qtwebengine-build --target QtWebEngineCore --parallel 4
           cmake --install C:\qtwebengine-build
 
       - uses: actions/upload-artifact@v4
